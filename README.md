@@ -1,13 +1,86 @@
 # JS-Magi
-An unminifier that does more complicated transformations to make the code readable.
+An unminifier that does more complicated transformations to make the code readable.  
+Note that this does not currently have major transformations, but it does generally make it easier.  
+As well, it is not made to avoid problems with adversarial javascript at the current time.  
 
 ## Transformations
-- Minor: Variable expansion
- - Transform `var n, a, b, c;` into separate variable declarations
- - This is sometimes nice for readability
-- TODO: Medium: For isolated function definitions with one-letter variable names, replace them with longer more distinctive variable names.
- - This makes it way easier to avoid confusing them variables outside of the scope
- - As well as making it easier to rename them
+#### Sequence Expander
+**Kind**: Minor, Readability
+Converts `a, b, c` into `a; b; c;`. This generally makes the code more readable.  
+
+### Void to Undefined
+**Kind**: Minor, Readability, Unminification
+Converts `void 0` into `undefined`. This is a common minification technique which is rarely actually used, and is generally more readable as `undefined`.
+
+### Not Literal
+**Kind**: Minor, Readability, Unminification
+Converts `!0` into `true` and `!(number here)` into `false`.
+
+### Not IIFE
+**Kind**: Minor, Readability, Unminification
+Converts `!function(){/*blah*/}()` into `(function(){/*blah*/})()`, when it used as a statement. This is just a trick by minifiers to avoid using one extra parentheses.
+
+### Init Assignment
+**Kind**: Minor, Readability, Unminification
+Converts `(c = n || (n = {})).thing = 'hi'` into
+```js
+n = n || {};
+c = n;
+c.thing = 'hi';
+```
+Which is more readable and allows future passes to remove unused variable redeclarations.
+
+### IIFE Expand
+**Kind**: Medium, Readability, Unminification
+This pass tries to expand basic IIFEs into their body.  
+This is useful on code which overuses them (probably to make it easier to minimize?).  
+Ex:
+```js
+(function (e) {
+    e.thing = 'hi';
+})(l);
+//
+l.thing = 'hi'
+```
+
+```js
+(function (e) {
+    e.thing = 'hi';
+})(l || (l = {}));
+//
+l = l || {};
+l.thing = 'hi';
+```
+
+```js
+(function (e) {
+    e.thing = 'hi';
+})(a = l || (l = {}));
+//
+l = l || {};
+a = l;
+// This uses the `l` variable instead because it doesn't actually need to use `a` at all.
+// and it makes it easier for a later pass to remove the unused variable.
+l.thing = 'hi';
+```
+
+It isn't as fully featured as I'd like at the moment, since it is focusing on expanding for member expressions and single parameters.  
+However it has the basic setup to allow me to expand more complicated IIFEs.
+
+### ES Module Rename
+If a variable has `Object.defineProperty(j, '__esModule', {..})` on it, then we assume it is an ES module and rename `j` to `exports` to make it clearer.
+
+### Nested Assignment
+**Kind**: Minor, Readability
+Converts `a = b = c = ... = 0` into `a = 0; b = 0; c = 0; ...`.  
+This isn't always more readable, but it can be.
+
+### Var Decl Expand
+**Kind**: Minor, Readability
+Converts `var a = 0, b = 1, c = 2` into `var a = 0; var b = 1; var c = 2`.
+This isn't always more readable, but it can be.
+
+
 
 ## Ideas
 ### Painful conditions
@@ -16,17 +89,6 @@ stuff like ` this.a || (this.a = !0, this.b && (this.b.fire(void 0), this.dispos
 `return this._token || (this._token = new c), this._token;`
 
 ### IIFEs
-simplifying this to a variable and a separate function call would be nice: `! function (e) {...}(s = t.a || (t.a = {}));`
-```js
-!function(e1) {
-                e1.type = new i.Abc("wow");
-            }(l || (l = {}));
-            (function(e1) {
-                e1.type = new i.Abs("doom");
-            })(u || (u = {}));
-```
-the `!` is just a short way of making the function its own expr so it can be immediately invoked
-
 recognize typescript enum defs
 ```js
   (function(e1) {
@@ -35,12 +97,13 @@ recognize typescript enum defs
                 e1[e1.C = 2] = "C";
             })(p = t.Thing || (t.Thing = {}));
 ```
-and maybe insert comments specifying that it is a ts enum
+and maybe insert comments specifying that it is a ts enum.
 
 For functions like these we can expand them out, to just use the variable directly.
 
 ### Source Maps
 TODO: might be able to use source maps for some better results?
+Some websites provide them.
 
 ### Weird Argument order
 Sometimes you see `undefined !== v` or `a.thing !== 0` or `"object" == typeof e1`, which is an unnatural ordering (I think so, at least?). We could try to detect this and swap the arguments around.
