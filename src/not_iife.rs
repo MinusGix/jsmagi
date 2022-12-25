@@ -6,9 +6,9 @@ use swc_ecma_visit::{noop_visit_mut_type, VisitMut, VisitMutWith};
 
 /// `!function (x) { ... }(x)` expr stmt => `(function () {})()`  
 /// May not be eval-safe
-pub struct NegIifeVisitor;
+pub struct NotIifeVisitor;
 
-impl VisitMut for NegIifeVisitor {
+impl VisitMut for NotIifeVisitor {
     noop_visit_mut_type!();
 
     fn visit_mut_stmt(&mut self, stmt: &mut Stmt) {
@@ -40,7 +40,7 @@ impl VisitMut for NegIifeVisitor {
 
 test!(
     Default::default(),
-    |_| as_folder(NegIifeVisitor),
+    |_| as_folder(NotIifeVisitor),
     neg_iife,
     "!function (x) { alert('hi') }(x)",
     "(function (x) { alert('hi') })(x)"
@@ -49,7 +49,7 @@ test!(
 // TODO: We could optimize some basic cases where they don't return a value from a function
 test!(
     Default::default(),
-    |_| as_folder(NegIifeVisitor),
+    |_| as_folder(NotIifeVisitor),
     neg_iife_sanity,
     "let j = !function (x) { return x }(x);",
     "let j = !function (x) { return x }(x);"

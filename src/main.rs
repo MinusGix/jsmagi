@@ -21,8 +21,8 @@ use swc_ecma_visit::as_folder;
 use void_to_undefined::VoidToUndefinedVisitor;
 
 use crate::{
-    es_module::EsModuleRenameVisitor, iife_expand::IifeExpandVisitor, neg_iife::NegIifeVisitor,
-    nested_assignment::NestedAssignmentVisitor, not_lit::NotLitVisitor,
+    es_module::EsModuleRenameVisitor, iife_expand::IifeExpandVisitor,
+    nested_assignment::NestedAssignmentVisitor, not_iife::NotIifeVisitor, not_lit::NotLitVisitor,
     seq_expand::SeqExpandVisitor, var_decl_expand::VarDeclExpand,
 };
 
@@ -30,8 +30,8 @@ pub mod es_module;
 pub mod eval;
 pub mod iife_expand;
 pub mod init_assignment;
-pub mod neg_iife;
 pub mod nested_assignment;
+pub mod not_iife;
 pub mod not_lit;
 pub mod rename;
 pub mod seq_expand;
@@ -91,7 +91,7 @@ fn parse(filename: impl AsRef<Path>) -> String {
                 SeqExpandVisitor,
                 VoidToUndefinedVisitor,
                 NotLitVisitor,
-                NegIifeVisitor,
+                NotIifeVisitor,
                 InitAssignmentVisitor,
                 NestedAssignmentVisitor,
                 VarDeclExpand,
