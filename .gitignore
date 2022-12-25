@@ -1,0 +1,7 @@
+/target
+^target/
+target
+example/hide*
+output.js
+# Hidden for now
+doc/
