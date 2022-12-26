@@ -1,0 +1,18 @@
+{
+    "files": [
+        "./example/output.ts"
+    ],
+    "compilerOptions": {
+        "target": "ESNext",
+        "allowUnreachableCode": true,
+        "allowUnusedLabels": false,
+        "alwaysStrict": false,
+        "noImplicitAny": false,
+        "noImplicitOverride": false,
+        "noImplicitThis": false,
+        "noPropertyAccessFromIndexSignature": false,
+        "strict": false,
+        "strictPropertyInitialization": false,
+        "useUnknownInCatchVariables": false,
+    }
+}

@@ -4,7 +4,14 @@ use swc_ecma_transforms_testing::test;
 use swc_ecma_visit::as_folder;
 use swc_ecma_visit::{noop_visit_mut_type, VisitMut, VisitMutWith};
 
+use crate::{FromMagiConfig, MagiConfig};
+
 pub struct NotLitVisitor;
+impl FromMagiConfig for NotLitVisitor {
+    fn from_config(_conf: &MagiConfig) -> Self {
+        Self
+    }
+}
 
 impl VisitMut for NotLitVisitor {
     noop_visit_mut_type!();

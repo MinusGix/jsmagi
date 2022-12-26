@@ -2,6 +2,7 @@
 ^target/
 target
 example/hide*
+example/output.ts
 output.js
 # Hidden for now
 doc/

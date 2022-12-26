@@ -6,9 +6,16 @@ use swc_ecma_transforms_testing::test;
 use swc_ecma_visit::as_folder;
 use swc_ecma_visit::{noop_visit_mut_type, VisitMut, VisitMutWith};
 
+use crate::{FromMagiConfig, MagiConfig};
+
 /// Transform nest assignments like `a = b = c = d = (some literal)` to
 /// `a = (some literal);\nb = (some literal);\nc = (some literal);\nd = (some literal);`
 pub struct NestedAssignmentVisitor;
+impl FromMagiConfig for NestedAssignmentVisitor {
+    fn from_config(_conf: &MagiConfig) -> Self {
+        Self
+    }
+}
 
 fn nested_assignment_converter(expr: Expr, span: Span) -> Vec<Expr> {
     let expr2 = expr.clone();

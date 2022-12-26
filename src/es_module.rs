@@ -11,10 +11,21 @@ use swc_ecma_transforms_testing::test;
 use swc_ecma_visit::as_folder;
 use swc_ecma_visit::{noop_visit_mut_type, VisitMut, VisitMutWith};
 
+use crate::{FromMagiConfig, MagiConfig};
+
 /// If the variable has `__esModule` defined on it with `Object.defineProperty` then assume that it is an es module and rename it to `exports`.  
 ///
 /// This may be overly aggressive, and should maybe only be used if you have reason to believe it using this specific method of doing es modules
-pub struct EsModuleRenameVisitor;
+pub struct EsModuleRenameVisitor {
+    typescript: bool,
+}
+impl FromMagiConfig for EsModuleRenameVisitor {
+    fn from_config(conf: &MagiConfig) -> Self {
+        Self {
+            typescript: conf.typescript,
+        }
+    }
+}
 
 fn visit_expr(expr: &mut Expr) {
     let Expr::Arrow(arrow) = &expr else { return };
@@ -108,7 +119,7 @@ impl VisitMut for EsModuleRenameVisitor {
 
 test!(
     Default::default(),
-    |_| as_folder(EsModuleRenameVisitor),
+    |_| as_folder(EsModuleRenameVisitor { typescript: false }),
     rename1,
     "(e, t, n) => { Object.defineProperty(t, \"__esModule\", { value: true }); t.x = 5; }",
     "(e, exports, n) => { Object.defineProperty(exports, \"__esModule\", { value: true }); exports.x = 5; }"
@@ -116,7 +127,7 @@ test!(
 
 test!(
     Default::default(),
-    |_| as_folder(EsModuleRenameVisitor),
+    |_| as_folder(EsModuleRenameVisitor { typescript: false }),
     rename2,
     "var e = { 38: (e, t, n) => { Object.defineProperty(t, \"__esModule\", { value: true }); t.x = 5; } };",
     "var e = { 38: (e, exports, n) => { Object.defineProperty(exports, \"__esModule\", { value: true }); exports.x = 5; } };"

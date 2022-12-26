@@ -4,8 +4,15 @@ use swc_ecma_transforms_testing::test;
 use swc_ecma_visit::as_folder;
 use swc_ecma_visit::{noop_visit_mut_type, VisitMut, VisitMutWith};
 
+use crate::{FromMagiConfig, MagiConfig};
+
 /// Converts `a, b, c` statements into `a; b; c;`
 pub struct SeqExpandVisitor;
+impl FromMagiConfig for SeqExpandVisitor {
+    fn from_config(_conf: &MagiConfig) -> Self {
+        Self
+    }
+}
 
 impl VisitMut for SeqExpandVisitor {
     noop_visit_mut_type!();

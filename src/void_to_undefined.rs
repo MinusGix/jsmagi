@@ -4,11 +4,16 @@ use swc_ecma_transforms_testing::test;
 use swc_ecma_visit::as_folder;
 use swc_ecma_visit::{noop_visit_mut_type, VisitMut, VisitMutWith};
 
-use crate::util::make_undefined;
+use crate::{util::make_undefined, FromMagiConfig, MagiConfig};
 
 /// Convert `void 0` to `undefined`  
 /// Minifiers convert the statements because `void 0` is very slightly shorter, however it is less natural to read.
 pub struct VoidToUndefinedVisitor;
+impl FromMagiConfig for VoidToUndefinedVisitor {
+    fn from_config(_conf: &MagiConfig) -> Self {
+        Self
+    }
+}
 
 impl VisitMut for VoidToUndefinedVisitor {
     noop_visit_mut_type!();

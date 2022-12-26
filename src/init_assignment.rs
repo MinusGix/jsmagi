@@ -8,7 +8,7 @@ use swc_ecma_transforms_testing::test;
 use swc_ecma_visit::as_folder;
 use swc_ecma_visit::{noop_visit_mut_type, VisitMut, VisitMutWith};
 
-use crate::util::replace_entries;
+use crate::{util::replace_entries, FromMagiConfig};
 
 /// `(c = n || (n = {})).thing = 'hi'` into
 /// `n = n || {}; c = n; c.thing = 'hi'`
@@ -122,6 +122,11 @@ pub fn replace_init_assignment(root_stmt: &Stmt) -> Option<SmallVec<[Stmt; 3]>> 
 /// `(c = n || (n = {})).thing = 'hi'` into
 /// `n = n || {}; c = n; c.thing = 'hi'`
 pub struct InitAssignmentVisitor;
+impl FromMagiConfig for InitAssignmentVisitor {
+    fn from_config(conf: &crate::MagiConfig) -> Self {
+        Self
+    }
+}
 
 impl VisitMut for InitAssignmentVisitor {
     noop_visit_mut_type!();

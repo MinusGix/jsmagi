@@ -6,6 +6,7 @@ use crate::{
         extract_expr_from_pat_or_expr, extract_or_assign_initializer, extract_or_initializer,
         get_assign_eq_expr, make_empty_object, make_undefined, unwrap_parens, NiceAccess, Remapper,
     },
+    FromMagiConfig,
 };
 #[cfg(test)]
 use swc_common::chain;
@@ -23,6 +24,12 @@ use swc_ecma_utils::find_pat_ids;
 use swc_ecma_visit::{as_folder, Fold};
 use swc_ecma_visit::{noop_visit_mut_type, VisitMut, VisitMutWith};
 pub struct IifeExpandVisitor;
+
+impl FromMagiConfig for IifeExpandVisitor {
+    fn from_config(_conf: &crate::MagiConfig) -> Self {
+        Self
+    }
+}
 
 // TODO: We should probably be checking for any recursiveness? I think you can still manage that even without a named function..
 

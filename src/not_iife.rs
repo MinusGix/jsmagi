@@ -4,9 +4,16 @@ use swc_ecma_transforms_testing::test;
 use swc_ecma_visit::as_folder;
 use swc_ecma_visit::{noop_visit_mut_type, VisitMut, VisitMutWith};
 
+use crate::{FromMagiConfig, MagiConfig};
+
 /// `!function (x) { ... }(x)` expr stmt => `(function () {})()`  
 /// May not be eval-safe
 pub struct NotIifeVisitor;
+impl FromMagiConfig for NotIifeVisitor {
+    fn from_config(_conf: &MagiConfig) -> Self {
+        Self
+    }
+}
 
 impl VisitMut for NotIifeVisitor {
     noop_visit_mut_type!();
