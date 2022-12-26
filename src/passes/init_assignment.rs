@@ -123,7 +123,7 @@ pub fn replace_init_assignment(root_stmt: &Stmt) -> Option<SmallVec<[Stmt; 3]>> 
 /// `n = n || {}; c = n; c.thing = 'hi'`
 pub struct InitAssignmentVisitor;
 impl FromMagiConfig for InitAssignmentVisitor {
-    fn from_config(conf: &crate::MagiConfig) -> Self {
+    fn from_config(_conf: &crate::MagiConfig) -> Self {
         Self
     }
 }

@@ -1,7 +1,5 @@
 use std::{path::Path, sync::Arc};
 
-use init_assignment::InitAssignmentVisitor;
-
 use swc::{
     config::{Config, Options, SourceMapsConfig},
     BoolConfig, Compiler, TransformOutput,
@@ -15,26 +13,20 @@ use swc_ecma_ast::EsVersion;
 use swc_ecma_parser::{EsConfig, Syntax};
 use swc_ecma_transforms_base::pass::noop;
 use swc_ecma_visit::{as_folder, Fold};
-use void_to_undefined::VoidToUndefinedVisitor;
 
-use crate::{
+use crate::passes::{
     es_module::EsModuleRenameVisitor, iife_expand::IifeExpandVisitor,
-    nested_assignment::NestedAssignmentVisitor, not_iife::NotIifeVisitor, not_lit::NotLitVisitor,
-    seq_expand::SeqExpandVisitor, var_decl_expand::VarDeclExpand,
+    init_assignment::InitAssignmentVisitor, nested_assignment::NestedAssignmentVisitor,
+    not_iife::NotIifeVisitor, not_lit::NotLitVisitor, seq_expand::SeqExpandVisitor,
+    var_decl_expand::VarDeclExpand, void_to_undefined::VoidToUndefinedVisitor,
 };
 
-pub mod es_module;
 pub mod eval;
-pub mod iife_expand;
-pub mod init_assignment;
-pub mod nested_assignment;
-pub mod not_iife;
-pub mod not_lit;
+
+pub mod passes;
 pub mod rename;
-pub mod seq_expand;
+
 pub mod util;
-pub mod var_decl_expand;
-pub mod void_to_undefined;
 
 #[derive(Debug, Clone)]
 pub struct MagiConfig {
