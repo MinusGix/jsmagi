@@ -14,6 +14,10 @@ use swc_ecma_visit::{noop_visit_mut_type, VisitMut, VisitMutWith};
 
 use crate::{util::unwrap_parens_mut, FromMagiConfig, MagiConfig};
 
+// TODO: analyze what the module sets on `exports.*` and collect those into a typescript interface
+// and maybe a comment
+// We can then have the type information refined as needed. We can also make it clear our uncertainty about the types by making a default '[key: string]: any' interface prop
+
 /// Looks for an object at the root with keys that are functions of the form `(e, t, n) => { ... }`
 /// and renames them to `module, exports, require` if they are found.
 pub struct EsModuleRenameVisitor {
