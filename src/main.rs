@@ -25,10 +25,15 @@ pub enum Commands {
     Transform {
         // TODO: Let the user request output to stdout
         file: PathBuf,
+        /// Path to output to. Default: `./output.{js,ts}`
         #[arg(long, short)]
         output: Option<PathBuf>,
+        /// Whether it should output the code as TypeScript. Default: true
         #[arg(long, default_value_t = true)]
         typescript: bool,
+        /// Whether it should assume that the file is compiled as ES Modules. Default: false
+        #[arg(long, short, default_value_t = false)]
+        assume_es_modules: bool,
     },
     // TODO: command to generate a typescript config file which matches our loose
     // application. Obviously, we can't generate good types in many cases, so allowing implicit-any
@@ -43,8 +48,12 @@ fn main() {
             file,
             output,
             typescript,
+            assume_es_modules,
         } => {
-            let conf = MagiConfig { typescript };
+            let conf = MagiConfig {
+                typescript,
+                assume_es_modules,
+            };
             let output = output.unwrap_or_else(|| {
                 let mut path = file
                     .parent()

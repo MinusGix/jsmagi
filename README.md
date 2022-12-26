@@ -213,6 +213,9 @@ and thus simplify the code quite a bit.
 ### JSX Conversion
 It might be desirable to be able to convert transpiled JSX back into JSX?
 
+## Known Bugs
+- Renaming `(e, t, n)` to `(module, exports, require)` can instead end up with `(module1, exports, require1)` and the like. This is an SWC bug.
+
 ## Wacky Unimplemented Ideas
 These are ideas that I'd love to implement, but are significantly more complicated and thus might take a while (if they ever appear)!
 - Some form of const evaluation. This would try to let us get around some of the more annoying obfuscation techniques
@@ -225,3 +228,6 @@ These are ideas that I'd love to implement, but are significantly more complicat
  - At a basic level, this could get us comments
  - Could also get variable names for us to use
  - Maybe even do transformations that we don't have implemented, though that is risker
+- Version which allows you to apply the transformations manually, one at a time.
+ - With an editor extension
+ - Would allow edits which are hard to detect properly, but that a human might be able to recognize the applicability of

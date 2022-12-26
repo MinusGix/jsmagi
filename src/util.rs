@@ -21,6 +21,15 @@ pub fn unwrap_parens(expr: &Expr) -> &Expr {
     }
 }
 
+/// Remove the parens from an expression, if they exist
+pub fn unwrap_parens_mut(expr: &mut Expr) -> &mut Expr {
+    if let Expr::Paren(paren) = expr {
+        unwrap_parens_mut(&mut paren.expr)
+    } else {
+        expr
+    }
+}
+
 pub fn make_empty_object(span: Span) -> Expr {
     Expr::Object(ObjectLit {
         span,

@@ -40,6 +40,8 @@ pub mod void_to_undefined;
 pub struct MagiConfig {
     /// Whether it should generate typescript code.  
     pub typescript: bool,
+    /// Whether it should assume that the file is compiled as ES Modules.
+    pub assume_es_modules: bool,
     // TODO: Option to be more careful about eval
     // TODO: Option to be more careful about property accessing, potentially due to getters/setters/proxies.
     //   Though, it would be good to allow the user to specify a whitelist/blacklist of functions
