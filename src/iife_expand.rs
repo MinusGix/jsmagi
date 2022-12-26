@@ -4,7 +4,7 @@ use crate::{
     rename::RenameIdentPass,
     util::{
         extract_expr_from_pat_or_expr, extract_or_assign_initializer, extract_or_initializer,
-        make_empty_object, make_undefined, unwrap_parens, NiceAccess, Remapper,
+        get_assign_eq_expr, make_empty_object, make_undefined, unwrap_parens, NiceAccess, Remapper,
     },
 };
 #[cfg(test)]
@@ -149,6 +149,8 @@ fn eval_initializer_iife(call: &CallExpr, callee: &Expr) -> Option<IifeExpansion
             })),
         })),
     }));
+
+    // Get the identifier that we want to use when swapping the parameter with the argument
     let use_ident = if let Some(assign_ident) = assign_ident {
         // `a = x`
         res.push(Stmt::Expr(ExprStmt {
@@ -169,12 +171,19 @@ fn eval_initializer_iife(call: &CallExpr, callee: &Expr) -> Option<IifeExpansion
         let new_ctxt = SyntaxContext::empty().apply_mark(Mark::fresh(Mark::root()));
         let use_ident = Ident::new("tmp".into(), call.span.with_ctxt(new_ctxt));
 
+        // note: using `match` so that we if we extend the enum in the future then we can easily
+        // notice that we need to handle the new variant
         // If it is a non-ident then we set a temporary variable equal to the value
         // Ofcourse, if it already has a tmp var (like in `a = x || (x = {})`) then we just use that
         match init_access {
+            // If it is an ident then we don't even bother using the above created identifier
             NiceAccess::Ident(_) => {}
             NiceAccess::Member(_) => {
                 // `let {use_ident} = x`
+                // We introduce the temporary variable because we can't always directly replace
+                // the `x` in `x = thing.obj;` with `thing.obj` because any intermediate
+                // side-effects that might occur between the usage could lead to `thing.obj` being
+                // reassigned and so `x` is no longer equal to `thing.obj` and is a different reference
                 res.push(Stmt::Decl(Decl::Var(Box::new(VarDecl {
                     span: call.span,
                     kind: VarDeclKind::Let,
@@ -216,7 +225,7 @@ fn eval_initializer_iife(call: &CallExpr, callee: &Expr) -> Option<IifeExpansion
                     remap.extend(ids);
                 }
             }
-            _ => {} // _ => return None,
+            _ => {}
         }
     }
 
@@ -231,12 +240,7 @@ fn eval_initializer_iife(call: &CallExpr, callee: &Expr) -> Option<IifeExpansion
     for stmt in &body.stmts {
         match stmt {
             Stmt::Expr(ExprStmt { expr, span }) => {
-                let Expr::Assign(assign) = expr.as_ref() else { return None; };
-
-                if assign.op != op!("=") {
-                    // We only support equality assignments
-                    return None;
-                }
+                let assign = get_assign_eq_expr(expr)?;
 
                 let left = extract_expr_from_pat_or_expr(&assign.left)?;
                 let Expr::Member(left) = left else { return None; };
@@ -265,10 +269,7 @@ fn eval_initializer_iife(call: &CallExpr, callee: &Expr) -> Option<IifeExpansion
                 let mut ren = RenameIdentPass { names: rename_map };
                 let mut expr = expr.clone();
                 expr.visit_mut_with(&mut ren);
-                res.push(Stmt::Expr(ExprStmt {
-                    expr: expr,
-                    span: *span,
-                }));
+                res.push(Stmt::Expr(ExprStmt { expr, span: *span }));
             }
             _ => return None,
         }

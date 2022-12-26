@@ -150,6 +150,66 @@ Some files define a big object indexed by numbers which are different small modu
 It would be cool to be able to unpack these as different files, or at least separate them more.  
 Then you could define types for the export functions/variables, and give them names.
 
+### ES Module Renaming
+We could just have a transformation that detects `42: (e, t, n)=>{` and just renames all the variables.
+
+### Basic Define Property
+```js
+Object.defineProperty(exports, "Thing", {
+    enumerable: true,
+    get: function() {
+        return l.Thing;
+    }
+});
+```
+We can probably replace this with `exports.Thing = l.Thing;`.  
+A question is whether we can do it in general. Most likely not, because `l.Thing` could be a getter or some other weird thing like that.  
+However, it would probably be a fine 'possible non runnable' transformation.
+
+### Class Naming
+`exports.Thing = class {`
+Could be turned into
+`exports.Thing = class Thing {` if we can detect that no one uses the variable `Thing`?  
+This would be a bit tricky, and it primarily just gives us the ability to get its name when running the code, so I don't think it is worth the time investment atm.
+
+### Detect Safe Variables
+It would be good to have a function which annotates variables in a scope as 'safe to access' or 'unsafe to access' or 'unsure'.  
+Some transformation are risky, like field accesses, because they could be getters/setters/proxies.  
+However, there is lots of cases where we know the definition of the variable and thus we can know it is safe to access and modify.  
+Ex:
+```js
+exports.Thing = undefined;
+// ...
+exports.Thing = exports.Thing || {};
+let tmp = exports.Thing;
+tmp.A = "A";
+tmp.B = "B";
+```
+We can detect that `exports.Thing` is safe to access, and thus we can get rid of `tmp`.  
+Though, this could be expensive to do. Especially since to be safe we may need to do it repeatedly due to passes messing with the code.
+
+### Initializers
+Sometimes the code, or my generated code, has the form:
+```js
+var a = undefined;
+// ...
+a = a || {};
+a.blah = "hi";
+// ...
+a = a || {};
+a.thing = "hi";
+```
+With actions which shouldn't be able to modify it in-between. We should be able to remove the second `a = a || {};` line.  
+As well, we could potentially move the `a = a || {};` to where it is initialized.
+Then we could do the same thing with the field assignments and just end up with:  
+```js
+var a = {
+    blah: "hi",
+    thing: "hi",
+};
+```
+and thus simplify the code quite a bit.
+
 ### JSX Conversion
 It might be desirable to be able to convert transpiled JSX back into JSX?
 

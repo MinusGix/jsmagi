@@ -196,6 +196,17 @@ pub fn make_or_initializer(ident: Ident) -> Expr {
     })
 }
 
+/// Get an `AssignExpr` if the expression is of the form `x = y`
+pub fn get_assign_eq_expr(expr: &Expr) -> Option<&AssignExpr> {
+    let Expr::Assign(assign) = expr else {return None;};
+
+    if assign.op == AssignOp::Assign {
+        Some(assign)
+    } else {
+        None
+    }
+}
+
 pub fn replace_entries<T, J, I, F>(data: &'_ mut Vec<T>, f: F)
 where
     T: 'static,
