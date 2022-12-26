@@ -4,7 +4,7 @@ use crate::{
     rename::RenameIdentPass,
     util::{
         extract_expr_from_pat_or_expr, extract_or_assign_initializer, extract_or_initializer,
-        make_empty_object, make_undefined, unwrap_parens, Remapper,
+        make_empty_object, make_undefined, unwrap_parens, NiceAccess, Remapper,
     },
 };
 #[cfg(test)]
@@ -12,7 +12,8 @@ use swc_common::chain;
 use swc_common::{Mark, SyntaxContext};
 use swc_ecma_ast::{
     op, AssignExpr, BinExpr, BindingIdent, BlockStmt, CallExpr, Callee, Decl, Expr, ExprOrSpread,
-    ExprStmt, Id, Ident, MemberProp, ModuleItem, Pat, PatOrExpr, Stmt, VarDecl, VarDeclarator,
+    ExprStmt, Id, Ident, MemberProp, ModuleItem, Pat, PatOrExpr, Stmt, VarDecl, VarDeclKind,
+    VarDeclarator,
 };
 #[cfg(test)]
 use swc_ecma_transforms_base::{hygiene::hygiene, resolver};
@@ -118,9 +119,11 @@ fn eval_initializer_iife(call: &CallExpr, callee: &Expr) -> Option<IifeExpansion
 
     // Extract initializers of the form `a = x || (x = {})` or `x || (x = {})`
     // where `assign_ident` is `a` and `init_ident` is `x`
-    let (assign_ident, init_ident) = extract_or_assign_initializer(&*init_expr)
+    let (assign_ident, init_access) = extract_or_assign_initializer(&*init_expr)
         .map(|(a, b)| (Some(a), b))
         .or_else(|| Some((None, extract_or_initializer(&*init_expr)?)))?;
+    let init_access_pat_or_expr: PatOrExpr = init_access.clone().try_into().ok()?;
+    let init_access_expr: Expr = init_access.clone().try_into().ok()?;
 
     if func.is_async || func.is_generator {
         return None;
@@ -135,21 +138,18 @@ fn eval_initializer_iife(call: &CallExpr, callee: &Expr) -> Option<IifeExpansion
         span: call.span,
         expr: Box::new(Expr::Assign(AssignExpr {
             span: call.span,
-            left: PatOrExpr::Pat(Box::new(Pat::Ident(BindingIdent {
-                id: init_ident.clone(),
-                type_ann: None,
-            }))),
+            left: init_access_pat_or_expr,
             op: op!("="),
             // a || {}
             right: Box::new(Expr::Bin(BinExpr {
                 span: call.span,
                 op: op!("||"),
-                left: Box::new(Expr::Ident(init_ident.clone())),
+                left: Box::new(init_access_expr.clone()),
                 right: Box::new(make_empty_object(call.span)),
             })),
         })),
     }));
-    if let Some(assign_ident) = assign_ident {
+    let use_ident = if let Some(assign_ident) = assign_ident {
         // `a = x`
         res.push(Stmt::Expr(ExprStmt {
             span: call.span,
@@ -160,10 +160,40 @@ fn eval_initializer_iife(call: &CallExpr, callee: &Expr) -> Option<IifeExpansion
                     type_ann: None,
                 }))),
                 op: op!("="),
-                right: Box::new(Expr::Ident(init_ident.clone())),
+                right: Box::new(init_access_expr.clone()),
             })),
         }));
-    }
+
+        assign_ident
+    } else {
+        let new_ctxt = SyntaxContext::empty().apply_mark(Mark::fresh(Mark::root()));
+        let use_ident = Ident::new("tmp".into(), call.span.with_ctxt(new_ctxt));
+
+        // If it is a non-ident then we set a temporary variable equal to the value
+        // Ofcourse, if it already has a tmp var (like in `a = x || (x = {})`) then we just use that
+        match init_access {
+            NiceAccess::Ident(_) => {}
+            NiceAccess::Member(_) => {
+                // `let {use_ident} = x`
+                res.push(Stmt::Decl(Decl::Var(Box::new(VarDecl {
+                    span: call.span,
+                    kind: VarDeclKind::Let,
+                    decls: vec![VarDeclarator {
+                        span: call.span,
+                        name: Pat::Ident(BindingIdent {
+                            id: use_ident.clone(),
+                            type_ann: None,
+                        }),
+                        init: Some(Box::new(init_access_expr)),
+                        definite: false,
+                    }],
+                    declare: false,
+                }))));
+            }
+        }
+
+        use_ident
+    };
 
     let mut remap = HashMap::new();
     let new_ctxt = SyntaxContext::empty().apply_mark(Mark::fresh(Mark::root()));
@@ -222,7 +252,16 @@ fn eval_initializer_iife(call: &CallExpr, callee: &Expr) -> Option<IifeExpansion
                 let MemberProp::Ident(_prop) = &left.prop else { return None; };
 
                 let mut rename_map = HashMap::default();
-                rename_map.insert(new_ident.to_id(), init_ident.clone());
+
+                match &init_access {
+                    NiceAccess::Ident(x) => {
+                        rename_map.insert(new_ident.to_id(), x.clone());
+                    }
+                    NiceAccess::Member(_) => {
+                        rename_map.insert(new_ident.to_id(), use_ident.clone());
+                    }
+                }
+
                 let mut ren = RenameIdentPass { names: rename_map };
                 let mut expr = expr.clone();
                 expr.visit_mut_with(&mut ren);
@@ -477,6 +516,41 @@ test!(
     // we shouldn't replace the variable name naively
     "var a,x; (function(e) { e.j = function (x) { e.k = 5 } })(a = x || (x = {}));",
     "var a,x; x = x || {}; a = x; x.j = function (x1) { x.k = 5 };"
+);
+
+test!(
+    Default::default(),
+    |_| tr(),
+    iife_expand11,
+    "var p; (function (e1) { e1.a = \"a\"; })(p = exports.Thing || (exports.Thing = {}));",
+    // TODO: We should be able to remove the `p` here
+    "var p; exports.Thing = exports.Thing || {}; p = exports.Thing; p.a = \"a\";"
+);
+test!(
+    Default::default(),
+    |_| tr(),
+    iife_expand12,
+    "var p; (function (e1) { e1.a = function () { return p.b; }; })(p = exports.Thing || (exports.Thing = {}));",
+    // This is a case where we can't just remove the `p` because it is used in the function
+    // and, unless we do more complicated analyses, we don't know that `exports.Thing` isn't 
+    // replaced by a different object, thus leaving `p` as a lone reference to the original object
+    "var p; exports.Thing = exports.Thing || {}; p = exports.Thing; p.a = function () { return p.b; };"
+);
+
+test!(
+    Default::default(),
+    |_| tr(),
+    iife_expand14,
+    "(function (e1) { e1.a = 'a'; })(exports.Thing || (exports.Thing = {}));",
+    // TODO: We could remove the `tmp` here
+    "exports.Thing = exports.Thing || {}; let tmp = exports.Thing; tmp.a = 'a'"
+);
+test!(
+    Default::default(),
+    |_| tr(),
+    iife_expand13,
+    "(function (e1) { e1.a = function () { return e1.b; }; })(exports.Thing || (exports.Thing = {}));",
+    "exports.Thing = exports.Thing || {}; let tmp = exports.Thing; tmp.a = function () { return tmp.b; };"
 );
 
 test!(
