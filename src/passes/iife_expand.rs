@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use crate::{
     rename::RenameIdentPass,
     util::{
-        extract_expr_from_pat_or_expr, extract_or_initializer_with_assign, get_assign_eq_expr,
-        make_empty_object, make_undefined, unwrap_parens, NiceAccess, Remapper,
+        extract_or_initializer_with_assign, get_assign_eq_expr, make_empty_object, make_undefined,
+        NiceAccess, Remapper,
     },
     FromMagiConfig,
 };
@@ -12,9 +12,8 @@ use crate::{
 use swc_common::chain;
 use swc_common::{Mark, SyntaxContext};
 use swc_ecma_ast::{
-    op, AssignExpr, BinExpr, BindingIdent, BlockStmt, CallExpr, Callee, Decl, Expr, ExprOrSpread,
-    ExprStmt, Id, Ident, MemberProp, ModuleItem, Pat, PatOrExpr, Stmt, VarDecl, VarDeclKind,
-    VarDeclarator,
+    op, AssignExpr, BinExpr, BindingIdent, CallExpr, Decl, Expr, ExprOrSpread, ExprStmt, Id, Ident,
+    ModuleItem, Pat, PatOrExpr, Stmt, VarDecl, VarDeclKind, VarDeclarator,
 };
 #[cfg(test)]
 use swc_ecma_transforms_base::{hygiene::hygiene, resolver};
@@ -42,10 +41,8 @@ enum IifeExpansion {
 
 /// Attempt to evaluate a simple IIFE into an expression.
 fn eval_iife(expr: &Expr) -> Option<IifeExpansion> {
-    let Expr::Call(call) = expr else { return None; };
-    let Callee::Expr(callee) = &call.callee else { return None; };
-
-    let callee = unwrap_parens(&**callee);
+    let call = expr.as_call()?;
+    let callee = call.callee.as_expr()?.unwrap_parens();
 
     // TODO: check type parameters, for typescript code
     if call.args.is_empty() {
@@ -58,7 +55,7 @@ fn eval_iife(expr: &Expr) -> Option<IifeExpansion> {
 }
 
 fn eval_no_args_iife(call: &CallExpr, callee: &Expr) -> Option<IifeExpansion> {
-    let Expr::Fn(fn_expr) = callee else { return None; };
+    let fn_expr = callee.as_fn_expr()?;
 
     if fn_expr.ident.is_some() {
         // It is nontrivial to check if the function identifier is used anywhere, so we just
@@ -77,14 +74,15 @@ fn eval_no_args_iife(call: &CallExpr, callee: &Expr) -> Option<IifeExpansion> {
         return None;
     }
 
-    let Some(BlockStmt { span: _, stmts }) = &func.body else { return None; };
+    let body = func.body.as_ref()?;
+    let stmts = &body.stmts;
 
     // TODO: We could at least use a constant folding pass on this, and also detect side-effect free garbage functions
     if stmts.is_empty() {
         Some(IifeExpansion::Nothing)
     } else if stmts.len() == 1 {
         // Get the return statement
-        let Stmt::Return(return_stmt) = &stmts[0] else { return None; };
+        let return_stmt = stmts[0].as_return_stmt()?;
 
         if let Some(val) = return_stmt.arg.as_ref() {
             Some(IifeExpansion::Expr(*val.clone()))
@@ -97,7 +95,7 @@ fn eval_no_args_iife(call: &CallExpr, callee: &Expr) -> Option<IifeExpansion> {
 }
 
 fn eval_initializer_iife(call: &CallExpr, callee: &Expr) -> Option<IifeExpansion> {
-    let Expr::Fn(fn_expr) = callee else { return None; };
+    let fn_expr = callee.as_fn_expr()?;
 
     if fn_expr.ident.is_some() {
         // It is nontrivial to check if the function identifier is used anywhere, so we just
@@ -112,7 +110,7 @@ fn eval_initializer_iife(call: &CallExpr, callee: &Expr) -> Option<IifeExpansion
         return None;
     }
 
-    let Pat::Ident(param) = &func.params[0].pat else { return None; };
+    let param = func.params[0].pat.as_ident()?;
     let ExprOrSpread {
         spread,
         expr: init_expr,
@@ -134,7 +132,7 @@ fn eval_initializer_iife(call: &CallExpr, callee: &Expr) -> Option<IifeExpansion
         return None;
     }
 
-    let Some(body) = &func.body else { return None; };
+    let body = func.body.as_ref()?;
 
     let mut res = Vec::new();
     // We need to add the init initializer to the beginning of the statements
@@ -247,10 +245,8 @@ fn eval_initializer_iife(call: &CallExpr, callee: &Expr) -> Option<IifeExpansion
             Stmt::Expr(ExprStmt { expr, span }) => {
                 let assign = get_assign_eq_expr(expr)?;
 
-                let left = extract_expr_from_pat_or_expr(&assign.left)?;
-                let Expr::Member(left) = left else { return None; };
-
-                let Expr::Ident(left_ident) = left.obj.as_ref() else { return None; };
+                let left = assign.left.as_expr()?.as_member()?;
+                let left_ident = left.obj.as_ident()?;
 
                 // We only support assignments to the single parameter
                 if left_ident.sym != param.sym {
@@ -258,7 +254,7 @@ fn eval_initializer_iife(call: &CallExpr, callee: &Expr) -> Option<IifeExpansion
                 }
 
                 // TODO: We could support more complicated member props!
-                let MemberProp::Ident(_prop) = &left.prop else { return None; };
+                let _prop = left.prop.as_ident()?;
 
                 let mut rename_map = HashMap::default();
 

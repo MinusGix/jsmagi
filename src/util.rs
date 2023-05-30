@@ -12,38 +12,10 @@ pub fn make_undefined(span: Span) -> Expr {
     Expr::Ident(Ident::new(js_word!("undefined"), span))
 }
 
-/// Remove the parens from an expression, if they exist
-pub fn unwrap_parens(expr: &Expr) -> &Expr {
-    if let Expr::Paren(paren) = expr {
-        unwrap_parens(&paren.expr)
-    } else {
-        expr
-    }
-}
-
-/// Remove the parens from an expression, if they exist
-pub fn unwrap_parens_mut(expr: &mut Expr) -> &mut Expr {
-    if let Expr::Paren(paren) = expr {
-        unwrap_parens_mut(&mut paren.expr)
-    } else {
-        expr
-    }
-}
-
 pub fn make_empty_object(span: Span) -> Expr {
     Expr::Object(ObjectLit {
         span,
         props: vec![],
-    })
-}
-
-pub fn extract_expr_from_pat_or_expr(pat_or_expr: &PatOrExpr) -> Option<&Expr> {
-    Some(match pat_or_expr {
-        PatOrExpr::Expr(left) => left,
-        PatOrExpr::Pat(left) => {
-            let Pat::Expr(left) = left.as_ref() else { return None; };
-            left
-        }
     })
 }
 
@@ -149,16 +121,16 @@ pub fn extract_or_initializer_with_assign(expr: &Expr) -> Option<(Option<Ident>,
 
 /// Check if the expression is of the form `a = x || (x = {})` and return both identifiers
 pub fn extract_or_assign_initializer(expr: &Expr) -> Option<(Ident, NiceAccess)> {
-    let Expr::Assign(assign) = expr else { return None; };
+    let assign = expr.as_assign()?;
 
     // Get the identifier on the left side of the assignment
-    let PatOrExpr::Pat(left) = &assign.left else { return None; };
+    let left = assign.left.as_pat()?;
 
     // TODO: We could support more complex expressions on the left side
-    let Pat::Ident(left_ident) = left.as_ref() else { return None; };
+    let left_ident = left.as_ident()?;
 
     // Get the right side of the assignment
-    let right = unwrap_parens(&assign.right);
+    let right = assign.right.unwrap_parens();
 
     // Check if the right side is of the form `x || (x = {})`
     let right_access = extract_or_initializer(right)?;
@@ -170,14 +142,13 @@ pub fn extract_or_assign_initializer(expr: &Expr) -> Option<(Ident, NiceAccess)>
 
 /// Check if the expression is of the form `x || (x = {})`, returning the expr
 pub fn extract_or_initializer(expr: &Expr) -> Option<NiceAccess> {
-    let Expr::Bin(bin) = expr else { return None; };
+    let bin = expr.as_bin()?;
 
     if bin.op != BinaryOp::LogicalOr {
         return None;
     }
 
-    let right = unwrap_parens(&bin.right);
-    let Expr::Assign(assign) = right else { return None; };
+    let assign = bin.right.unwrap_parens().as_assign()?;
     if assign.op != AssignOp::Assign {
         return None;
     }

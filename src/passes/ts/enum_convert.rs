@@ -1,24 +1,17 @@
-use std::collections::HashMap;
-
 use swc_atoms::{js_word, JsWord};
-use swc_common::{Mark, Span, Spanned, SyntaxContext};
+use swc_common::{Mark, SyntaxContext};
 use swc_ecma_ast::{
-    op, AssignExpr, BinExpr, BindingIdent, CallExpr, Callee, Decl, Expr, ExprOrSpread, ExprStmt,
-    FnExpr, Id, Ident, Lit, MemberExpr, MemberProp, ModuleItem, Pat, PatOrExpr, Stmt, TsEnumDecl,
-    TsEnumMember, TsEnumMemberId, VarDecl, VarDeclKind, VarDeclarator,
+    op, AssignExpr, BinExpr, BindingIdent, CallExpr, Callee, Expr, ExprOrSpread, ExprStmt, FnExpr,
+    Ident, Lit, MemberExpr, MemberProp, ModuleItem, Pat, PatOrExpr, Stmt, TsEnumDecl, TsEnumMember,
+    TsEnumMemberId,
 };
-use swc_ecma_parser::{Syntax, TsConfig};
+
 use swc_ecma_transforms_testing::test;
-use swc_ecma_utils::find_pat_ids;
-use swc_ecma_visit::{as_folder, noop_visit_mut_type, VisitMut, VisitMutWith};
+
+use swc_ecma_visit::{noop_visit_mut_type, VisitMut, VisitMutWith};
 
 use crate::{
-    rename::RenameIdentPass,
-    util::{
-        extract_expr_from_pat_or_expr, extract_or_assign_initializer, extract_or_initializer,
-        extract_or_initializer_with_assign, get_assign_eq_expr, make_empty_object, unwrap_parens,
-        NiceAccess, Remapper,
-    },
+    util::{extract_or_initializer_with_assign, get_assign_eq_expr, make_empty_object, NiceAccess},
     FromMagiConfig, MagiConfig, RandomName,
 };
 
@@ -109,31 +102,6 @@ fn visit_stmt(random_name: &RandomName, stmt: &Stmt) -> Option<Vec<Stmt>> {
         })),
     }));
 
-    let mut remap = HashMap::new();
-    let new_ctxt = SyntaxContext::empty().apply_mark(Mark::fresh(Mark::root()));
-
-    let new_ident = Ident::new(param.sym.clone(), param.span.with_ctxt(new_ctxt));
-    remap.insert(param.to_id(), new_ctxt);
-
-    for stmt in &body.stmts {
-        match stmt {
-            Stmt::Decl(Decl::Var(var)) => {
-                for decl in &var.decls {
-                    let ids: Vec<Id> = find_pat_ids(&decl.name);
-                    let ids = ids.into_iter().map(|id| {
-                        (
-                            id,
-                            SyntaxContext::empty().apply_mark(Mark::fresh(Mark::root())),
-                        )
-                    });
-
-                    remap.extend(ids);
-                }
-            }
-            _ => {}
-        }
-    }
-
     let use_v: Expr = if let Some(assign_ident) = assign_ident {
         // `a = x`
         res.push(Stmt::Expr(ExprStmt {
@@ -153,10 +121,6 @@ fn visit_stmt(random_name: &RandomName, stmt: &Stmt) -> Option<Vec<Stmt>> {
     } else {
         init_access_expr.clone()
     };
-
-    // TODO: We should be able to just directly modify it
-    let mut body = body.clone();
-    body.visit_mut_with(&mut Remapper { vars: remap });
 
     let enum_id = {
         let id = init_access_expr
@@ -191,7 +155,7 @@ fn visit_stmt(random_name: &RandomName, stmt: &Stmt) -> Option<Vec<Stmt>> {
         let ExprStmt { expr, span } = stmt.as_expr()?;
         let assign = get_assign_eq_expr(expr)?;
 
-        let left = extract_expr_from_pat_or_expr(&assign.left)?;
+        let left = assign.left.as_expr()?;
 
         let left = left.as_member()?;
         let left_ident = left.obj.as_ident()?;
@@ -237,7 +201,7 @@ fn visit_stmt(random_name: &RandomName, stmt: &Stmt) -> Option<Vec<Stmt>> {
         // TODO: Check whether numbers have repeats?
 
         let member = TsEnumMember {
-            span: expr.span(),
+            span: span.clone(),
             id: TsEnumMemberId::Ident(prop_name.clone()),
             init: Some(Box::new(init.clone().into())),
         };
@@ -344,18 +308,19 @@ impl VisitMut for EnumConvert {
 }
 
 #[cfg(test)]
-const TS_SYN: Syntax = Syntax::Typescript(TsConfig {
-    tsx: false,
-    decorators: false,
-    dts: false,
-    no_early_errors: true,
-});
+const TS_SYN: swc_ecma_parser::Syntax =
+    swc_ecma_parser::Syntax::Typescript(swc_ecma_parser::TsConfig {
+        tsx: false,
+        decorators: false,
+        dts: false,
+        no_early_errors: true,
+    });
 
 #[cfg(test)]
 fn enum_convert(
     _: &mut swc_ecma_transforms_testing::Tester<'_>,
 ) -> swc_ecma_visit::Folder<EnumConvert> {
-    as_folder(EnumConvert {
+    swc_ecma_visit::as_folder(EnumConvert {
         random_name: RandomName::default(),
     })
 }
@@ -403,9 +368,7 @@ test!(
 
 test!(
     TS_SYN,
-    |_| as_folder(EnumConvert {
-        random_name: RandomName::default()
-    }),
+    enum_convert,
     non_enum_convert1,
     // Should not convert this to an enum. Though if anything actually outputs this, it might be desirable.
     "(function (e) { e[0] = \"A\"; e[1] = \"B\"; })(w || (w = {}));",

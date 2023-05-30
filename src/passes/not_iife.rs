@@ -15,31 +15,36 @@ impl FromMagiConfig for NotIifeVisitor {
     }
 }
 
+fn replace_not_iife(stmt: &mut Stmt) -> Option<()> {
+    let expr = stmt.as_expr()?;
+    let unary = expr.expr.as_unary()?;
+    if unary.op != UnaryOp::Bang {
+        return None;
+    }
+
+    let call = unary.arg.as_call()?;
+    let fn_expr = call.callee.as_expr()?.as_fn_expr()?;
+
+    *stmt = ExprStmt {
+        span: expr.span,
+        // TODO: This could theoretically just move the function expression
+        expr: Box::new(Expr::Call(CallExpr {
+            span: expr.span,
+            callee: Callee::Expr(Box::new(Expr::Fn(fn_expr.clone()))),
+            args: call.args.clone(),
+            type_args: None,
+        })),
+    }
+    .into();
+
+    Some(())
+}
+
 impl VisitMut for NotIifeVisitor {
     noop_visit_mut_type!();
 
     fn visit_mut_stmt(&mut self, stmt: &mut Stmt) {
-        if let Stmt::Expr(expr) = stmt {
-            if let Expr::Unary(unary) = &mut *expr.expr {
-                if unary.op == UnaryOp::Bang {
-                    if let Expr::Call(call) = &mut *unary.arg {
-                        if let Callee::Expr(fn_expr) = &mut call.callee {
-                            if let Expr::Fn(fn_decl) = &mut **fn_expr {
-                                *stmt = Stmt::Expr(ExprStmt {
-                                    span: expr.span,
-                                    expr: Box::new(Expr::Call(CallExpr {
-                                        span: expr.span,
-                                        callee: Callee::Expr(Box::new(Expr::Fn(fn_decl.clone()))),
-                                        args: call.args.clone(),
-                                        type_args: None,
-                                    })),
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        replace_not_iife(stmt);
 
         stmt.visit_mut_children_with(self);
     }

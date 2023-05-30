@@ -13,29 +13,30 @@ impl FromMagiConfig for NotLitVisitor {
     }
 }
 
+fn replace_not_lit(expr: &mut Expr) -> Option<()> {
+    let unary = expr.as_unary()?;
+    if unary.op != UnaryOp::Bang {
+        return None;
+    }
+
+    let lit = unary.arg.as_lit()?;
+    let Lit::Num(v) = lit else { return None; };
+
+    let value = if v.value == 0.0 { true } else { false };
+
+    *expr = Expr::Lit(Lit::Bool(Bool {
+        value,
+        span: unary.span,
+    }));
+
+    Some(())
+}
+
 impl VisitMut for NotLitVisitor {
     noop_visit_mut_type!();
 
     fn visit_mut_expr(&mut self, expr: &mut Expr) {
-        if let Expr::Unary(unary) = expr {
-            if unary.op == UnaryOp::Bang {
-                if let Expr::Lit(lit) = &*unary.arg {
-                    if let Lit::Num(v) = lit {
-                        if v.value == 0.0 {
-                            *expr = Expr::Lit(Lit::Bool(Bool {
-                                value: true,
-                                span: unary.span,
-                            }));
-                        } else {
-                            *expr = Expr::Lit(Lit::Bool(Bool {
-                                value: false,
-                                span: unary.span,
-                            }));
-                        }
-                    }
-                }
-            }
-        }
+        replace_not_lit(expr);
 
         expr.visit_mut_children_with(self);
     }

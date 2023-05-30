@@ -2,9 +2,7 @@ use std::collections::HashMap;
 
 use swc_atoms::{js_word, JsWord};
 
-use swc_ecma_ast::{
-    BlockStmtOrExpr, Callee, Decl, Expr, ExprStmt, ModuleItem, Pat, Prop, PropOrSpread, Stmt,
-};
+use swc_ecma_ast::{Decl, Expr, ModuleItem, Pat, Prop, PropOrSpread};
 use swc_ecma_transforms_base::rename::rename;
 use swc_ecma_transforms_testing::test;
 use swc_ecma_utils::ident::IdentLike;
@@ -12,7 +10,7 @@ use swc_ecma_utils::ident::IdentLike;
 use swc_ecma_visit::as_folder;
 use swc_ecma_visit::{noop_visit_mut_type, VisitMut, VisitMutWith};
 
-use crate::{util::unwrap_parens_mut, FromMagiConfig, MagiConfig};
+use crate::{FromMagiConfig, MagiConfig};
 
 // TODO: analyze what the module sets on `exports.*` and collect those into a typescript interface
 // and maybe a comment
@@ -31,80 +29,86 @@ impl FromMagiConfig for EsModuleRenameVisitor {
     }
 }
 
+fn visit_mut_module_items(_typescript: bool, n: &mut Vec<ModuleItem>) -> Option<()> {
+    // TODO: this might benefit from being more general?
+
+    // If there is an iife at the root, go into it
+    let stmt = n.get_mut(0)?.as_mut_stmt()?;
+    let expr = stmt.as_mut_expr()?.expr.as_mut();
+    let call = expr.as_mut_call()?;
+
+    let callee = call.callee.as_mut_expr()?.unwrap_parens_mut();
+
+    let block = match callee {
+        Expr::Arrow(arrow) => {
+            // TODO: technically this ignores single expression arrow functions
+            let block = arrow.body.as_mut_block_stmt()?;
+            block
+        }
+        Expr::Fn(func) => {
+            let body = func.function.body.as_mut()?;
+            body
+        }
+        _ => return None,
+    };
+
+    let decl = block.stmts.get_mut(0)?.as_mut_decl()?;
+    let Decl::Var(decl) = decl else { return None; };
+
+    // We assume that it is the first variable
+    let decl = decl.decls.get_mut(0)?;
+
+    // Get the value it is being initialized to
+    let init = decl.init.as_deref_mut()?.as_mut_object()?;
+
+    for prop in &mut init.props {
+        // TODO: is it actually okay to skip over these?
+        let PropOrSpread::Prop(prop) = prop else { continue; };
+        let Prop::KeyValue(key_value) = prop.as_ref() else { continue; };
+
+        let params = match key_value.value.as_ref() {
+            Expr::Arrow(arrow) => {
+                let params = &arrow.params;
+                if params.len() != 3 {
+                    continue;
+                }
+
+                (&params[0], &params[1], &params[2])
+            }
+            Expr::Fn(func) => {
+                let params = &func.function.params;
+                if params.len() != 3 {
+                    continue;
+                }
+
+                (&params[0].pat, &params[1].pat, &params[2].pat)
+            }
+            _ => continue,
+        };
+
+        let (Pat::Ident(p1), Pat::Ident(p2), Pat::Ident(p3)) = params else { continue; };
+
+        if !idents_match_req(p1, p2, p3) {
+            continue;
+        }
+
+        let mut renames = HashMap::default();
+        renames.insert(p1.id.to_id(), js_word!("module"));
+        renames.insert(p2.id.to_id(), JsWord::from("exports"));
+        renames.insert(p3.id.to_id(), js_word!("require"));
+
+        let mut renamer = rename(&renames);
+        prop.visit_mut_children_with(&mut renamer);
+    }
+
+    Some(())
+}
+
 impl VisitMut for EsModuleRenameVisitor {
     noop_visit_mut_type!();
 
     fn visit_mut_module_items(&mut self, n: &mut Vec<ModuleItem>) {
-        // TODO: This might benefit from being more general?
-
-        // If there is an iife at the root, go into it
-        let Some(ModuleItem::Stmt(stmt)) = n.get_mut(0) else { return; };
-        let Stmt::Expr(ExprStmt { expr, .. }) = stmt else { return; };
-        let Expr::Call(call) = expr.as_mut() else { return; };
-
-        let Callee::Expr(callee) = &mut call.callee else { return; };
-
-        let callee = unwrap_parens_mut(callee.as_mut());
-
-        let block = match callee {
-            Expr::Arrow(arrow) => {
-                let BlockStmtOrExpr::BlockStmt(block) = &mut arrow.body else { return; };
-                block
-            }
-            Expr::Fn(func) => {
-                let Some(body) = &mut func.function.body else { return; };
-                body
-            }
-            _ => return,
-        };
-
-        let Some(Stmt::Decl(Decl::Var(decl))) = block.stmts.get_mut(0) else { return; };
-
-        // We assume that it is the first variable
-        let Some(decl) = decl.decls.get_mut(0) else { return; };
-
-        // Get the value it is being intialized to
-        let Some(init) = &mut decl.init else { return; };
-        let Expr::Object(obj) = init.as_mut() else { return; };
-
-        for prop in &mut obj.props {
-            let PropOrSpread::Prop(prop) = prop else { continue; };
-            let Prop::KeyValue(key_value) = prop.as_ref() else { continue; };
-
-            let params = match key_value.value.as_ref() {
-                Expr::Arrow(arrow) => {
-                    let params = &arrow.params;
-                    if params.len() != 3 {
-                        continue;
-                    }
-
-                    (&params[0], &params[1], &params[2])
-                }
-                Expr::Fn(func) => {
-                    let params = &func.function.params;
-                    if params.len() != 3 {
-                        continue;
-                    }
-
-                    (&params[0].pat, &params[1].pat, &params[2].pat)
-                }
-                _ => continue,
-            };
-
-            let (Pat::Ident(p1), Pat::Ident(p2), Pat::Ident(p3)) = params else { continue; };
-
-            if !idents_match_req(p1, p2, p3) {
-                continue;
-            }
-
-            let mut renames = HashMap::default();
-            renames.insert(p1.id.to_id(), js_word!("module"));
-            renames.insert(p2.id.to_id(), JsWord::from("exports"));
-            renames.insert(p3.id.to_id(), js_word!("require"));
-
-            let mut renamer = rename(&renames);
-            prop.visit_mut_children_with(&mut renamer);
-        }
+        visit_mut_module_items(self.typescript, n);
 
         n.visit_mut_children_with(self);
     }

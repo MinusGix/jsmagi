@@ -14,50 +14,52 @@ use crate::{util::replace_entries, FromMagiConfig};
 /// `n = n || {}; c = n; c.thing = 'hi'`
 pub fn replace_init_assignment(root_stmt: &Stmt) -> Option<SmallVec<[Stmt; 3]>> {
     // (c = n || (n = {})).thing = 'hi'
-    let Stmt::Expr(root_expr) = root_stmt else { return None };
-    let Expr::Assign(root_assign) = root_expr.expr.as_ref() else { return None };
+    let root_expr = root_stmt.as_expr()?;
+    let root_assign = root_expr.expr.as_assign()?;
     // We only care about `=`, but supporting `+=` and other operators is possible, but only really beneficial if the default value has fields that are used
     if root_assign.op != AssignOp::Assign {
         return None;
     }
 
     // -> `(c = n || (n = {})).thing`
-    let PatOrExpr::Pat(obj_left) = &root_assign.left else { return  None };
-    let Pat::Expr(obj_left) = obj_left.as_ref() else { return  None };
-    let Expr::Member(obj_left) = obj_left.as_ref() else { return  None };
+    let obj_left = root_assign.left.as_pat()?.as_expr()?.as_member()?;
 
     // -> `c = n || (n = {})`
-    let Expr::Paren(inner_obj) = obj_left.obj.as_ref() else { return  None };
-    let Expr::Assign(inner_obj) = &*inner_obj.expr else { return  None };
+    // let Expr::Paren(inner_obj) = obj_left.obj.as_ref() else { return  None };
+    // let Expr::Assign(inner_obj) = &*inner_obj.expr else { return  None };
+    let inner_obj = obj_left.obj.unwrap_parens().as_assign()?;
 
     // `c`. We only allow idents, for simplicity
-    let PatOrExpr::Pat(c_obj) = & inner_obj.left else { return  None };
-    let Pat::Ident(c_obj) = c_obj.as_ref() else { return  None };
+    // let PatOrExpr::Pat(c_obj) = & inner_obj.left else { return  None };
+    // let Pat::Ident(c_obj) = c_obj.as_ref() else { return  None };
+    let c_obj = inner_obj.left.as_pat()?.as_ident()?;
 
     // `n || (n = {})`
-    let Expr::Bin(default_expr) = inner_obj.right.as_ref() else { return  None };
+    let default_expr = inner_obj.right.as_bin()?;
     if default_expr.op != BinaryOp::LogicalOr {
         return None;
     }
 
     // `n`
-    let Expr::Ident(n_obj) = default_expr.left.as_ref() else { return  None };
+    let n_obj = default_expr.left.as_ident()?;
 
-    // TODO: support version without parens?
     // `(n = {})`
-    let Expr::Paren(n_assign) = default_expr.right.as_ref() else { return  None };
-    let Expr::Assign(n_assign) = n_assign.expr.as_ref() else { return  None };
+    // let Expr::Paren(n_assign) = default_expr.right.as_ref() else { return  None };
+    // let Expr::Assign(n_assign) = n_assign.expr.as_ref() else { return  None };
+    let n_assign = default_expr.right.unwrap_parens().as_assign()?;
     // Doesn't make sense to support other assignment operators here
     if n_assign.op != AssignOp::Assign {
         return None;
     }
 
     // `n`
-    let PatOrExpr::Pat(n_assign_obj) = &n_assign.left else { return  None };
-    let Pat::Ident(n_assign_obj) = n_assign_obj.as_ref() else { return  None };
+    // let PatOrExpr::Pat(n_assign_obj) = &n_assign.left else { return  None };
+    // let Pat::Ident(n_assign_obj) = n_assign_obj.as_ref() else { return  None };
+    let n_assign_obj = n_assign.left.as_pat()?.as_ident()?;
 
     // `{}`
-    let Expr::Object(right_paren_assign_right) = n_assign.right.as_ref() else { return  None };
+    // let Expr::Object(right_paren_assign_right) = n_assign.right.as_ref() else { return  None };
+    let right_paren_assign_right = n_assign.right.as_object()?;
     // TODO: We can do better than this
     if !right_paren_assign_right.props.is_empty() {
         return None;
