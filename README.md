@@ -3,35 +3,48 @@ An unminifier that does more complicated transformations to make the code readab
 Note that this does not currently have major transformations, but it does generally make it easier.  
 As well, it is not made to avoid problems with adversarial javascript at the current time.  
 
+## Installation
+Currently, clone the repo and `cargo build --release`.  
+  
+TODO: Separate binary.
+TODO: Webpage.
+
+## Usage
+`js-magi transform ./input.js --output ./output.ts`  
+By default it turns the file into Typescript, due to being easier to analyze in typical code editors. This would allow you to specify types, and VSCode appears to provide better type inference for TS files.  
+
 ## Transformations
 #### Sequence Expander
-**Kind**: Minor, Readability
-Converts `a, b, c` into `a; b; c;`. This generally makes the code more readable.  
+**Kind**: Minor, Readability  
+Converts `a, b, c` into `a; b; c;`.  
+This typically makes the code more readable.  
 
 ### Void to Undefined
-**Kind**: Minor, Readability, Unminification
-Converts `void 0` into `undefined`. This is a common minification technique which is rarely actually used, and is generally more readable as `undefined`.
+**Kind**: Minor, Readability, Unminification  
+Converts `void 0` into `undefined`.   
+This is a common minification technique which is rarely used by actual developers, and is generally more readable as `undefined`.
 
 ### Not Literal
-**Kind**: Minor, Readability, Unminification
+**Kind**: Minor, Readability, Unminification  
 Converts `!0` into `true` and `!(number here)` into `false`.
 
 ### Not IIFE
-**Kind**: Minor, Readability, Unminification
-Converts `!function(){/*blah*/}()` into `(function(){/*blah*/})()`, when it used as a statement. This is just a trick by minifiers to avoid using one extra parentheses.
+**Kind**: Minor, Readability, Unminification  
+Converts `!function(){/*blah*/}()` into `(function(){/*blah*/})()`, when it used as a statement. This is just a trick by minifiers to avoid using one extra parentheses.  
 
 ### Init Assignment
-**Kind**: Minor, Readability, Unminification
-Converts `(c = n || (n = {})).thing = 'hi'` into
+**Kind**: Minor, Readability, Unminification  
+Converts `(c = n || (n = {})).thing = 'hi'` into  
 ```js
 n = n || {};
 c = n;
 c.thing = 'hi';
 ```
 Which is more readable and allows future passes to remove unused variable redeclarations.
+(TODO: There may be edge cases here. Proxies?)
 
 ### IIFE Expand
-**Kind**: Medium, Readability, Unminification
+**Kind**: Medium, Readability, Unminification  
 This pass tries to expand basic IIFEs into their body.  
 This is useful on code which overuses them (probably to make it easier to minimize?).  
 Ex:
@@ -63,6 +76,7 @@ a = l;
 // and it makes it easier for a later pass to remove the unused variable.
 l.thing = 'hi';
 ```
+(TODO: does this last one have issues if `l` is a string?)  
 
 It isn't as fully featured as I'd like at the moment, since it is focusing on expanding for member expressions and single parameters.  
 However it has the basic setup to allow me to expand more complicated IIFEs.
@@ -71,14 +85,14 @@ However it has the basic setup to allow me to expand more complicated IIFEs.
 If a variable has `Object.defineProperty(j, '__esModule', {..})` on it, then we assume it is an ES module and rename `j` to `exports` to make it clearer.
 
 ### Nested Assignment
-**Kind**: Minor, Readability
-Converts `a = b = c = ... = 0` into `a = 0; b = 0; c = 0; ...`.  
-This isn't always more readable, but it can be.
+**Kind**: Minor, Readability  
+Converts `a = b = c = ... = 0` into `a = 0; b = 0; c = 0; ...`.    
+This isn't always more readable, but it can be. This is also easier for future passes to removed unused variable declarations, or to collapse the future assignments into one.
 
 ### Var Decl Expand
-**Kind**: Minor, Readability
+**Kind**: Minor, Readability  
 Converts `var a = 0, b = 1, c = 2` into `var a = 0; var b = 1; var c = 2`.
-This isn't always more readable, but it can be.
+This isn't always more readable, but it can be. This is also easier for future passes to removed unused variable declarations, or to collapse the future assignments into one.
 
 
 
@@ -215,6 +229,9 @@ It might be desirable to be able to convert transpiled JSX back into JSX?
 
 ## Known Bugs
 - Renaming `(e, t, n)` to `(module, exports, require)` can instead end up with `(module1, exports, require1)` and the like. This is an SWC bug.
+- comment on line before root iife can end up just before it after transformation
+  - `/* abc */ (() => {})`
+- Only sortof bug, but maybe need better default tsconfig: Classes complain that fields aren't defined. Inferring the names of fields probably wouldn't be hard, but the issue is getting the types. We could just use `any`.
 
 ## Wacky Unimplemented Ideas
 These are ideas that I'd love to implement, but are significantly more complicated and thus might take a while (if they ever appear)!
@@ -231,3 +248,9 @@ These are ideas that I'd love to implement, but are significantly more complicat
 - Version which allows you to apply the transformations manually, one at a time.
  - With an editor extension
  - Would allow edits which are hard to detect properly, but that a human might be able to recognize the applicability of
+- Have a way of mapping an original span to the span of the resulting file, to make it easier to see what happened.
+- Have so some optional destructive transformations leave a comment with a code indicating what transformation was done.
+  - like we have `Object.defineProperty` that might be slightly different if you just declare the field normally (because it might disallow setting or something), but a destructive transform would make it more readable. Just leave a code like `// MCode(D001)` or something.
+  - and then have a command to get the information about the code. Like how rustc does with `rustc --explain E001`
+- Use chatgpt to provide better names for functions and variables. Could also be used to provide comments.
+  - Could also be used to simplify code, but that is riskier.

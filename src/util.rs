@@ -139,6 +139,14 @@ impl<'a> TryFrom<&'a PatOrExpr> for NiceAccess {
     }
 }
 
+/// Check if the expression is of the form `a = x || (x = {})` and return both identifiers  
+/// Otherwise, check if the expression is of the form `a || (a = {})` and return the identifier
+pub fn extract_or_initializer_with_assign(expr: &Expr) -> Option<(Option<Ident>, NiceAccess)> {
+    extract_or_assign_initializer(expr)
+        .map(|(a, b)| (Some(a), b))
+        .or_else(|| Some((None, extract_or_initializer(expr)?)))
+}
+
 /// Check if the expression is of the form `a = x || (x = {})` and return both identifiers
 pub fn extract_or_assign_initializer(expr: &Expr) -> Option<(Ident, NiceAccess)> {
     let Expr::Assign(assign) = expr else { return None; };
@@ -207,7 +215,7 @@ pub fn make_or_initializer(ident: Ident) -> Expr {
 
 /// Get an `AssignExpr` if the expression is of the form `x = y`
 pub fn get_assign_eq_expr(expr: &Expr) -> Option<&AssignExpr> {
-    let Expr::Assign(assign) = expr else {return None;};
+    let assign = expr.as_assign()?;
 
     if assign.op == AssignOp::Assign {
         Some(assign)

@@ -1,4 +1,4 @@
-use std::{path::Path, sync::Arc};
+use std::{cell::Cell, path::Path, rc::Rc, sync::Arc};
 
 use swc::{
     config::{Config, Options, SourceMapsConfig},
@@ -18,7 +18,8 @@ use crate::passes::{
     es_module::EsModuleRenameVisitor, iife_expand::IifeExpandVisitor,
     init_assignment::InitAssignmentVisitor, nested_assignment::NestedAssignmentVisitor,
     not_iife::NotIifeVisitor, not_lit::NotLitVisitor, seq_expand::SeqExpandVisitor,
-    var_decl_expand::VarDeclExpand, void_to_undefined::VoidToUndefinedVisitor,
+    ts::enum_convert::EnumConvert, var_decl_expand::VarDeclExpand,
+    void_to_undefined::VoidToUndefinedVisitor,
 };
 
 pub mod eval;
@@ -38,6 +39,7 @@ pub struct MagiConfig {
     // TODO: Option to be more careful about property accessing, potentially due to getters/setters/proxies.
     //   Though, it would be good to allow the user to specify a whitelist/blacklist of functions
     //   that they believe are likely 'safe'
+    pub random_name: RandomName,
 }
 impl MagiConfig {
     pub(crate) fn get_passes(&self) -> impl Fold {
@@ -53,7 +55,36 @@ impl MagiConfig {
             IifeExpandVisitor::from_config(self),
             // TODO: make toggleable
             EsModuleRenameVisitor::from_config(self),
+            EnumConvert::from_config(self),
         ))
+    }
+
+    pub fn random_name(&self) -> RandomName {
+        self.random_name.clone()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct RandomName {
+    id: Rc<Cell<usize>>,
+}
+// Mostly for testing
+impl Default for RandomName {
+    fn default() -> Self {
+        Self {
+            id: Rc::new(Cell::new(0)),
+        }
+    }
+}
+impl RandomName {
+    pub fn new(id: Rc<Cell<usize>>) -> Self {
+        Self { id }
+    }
+
+    pub fn get(&self, prefix: &str) -> String {
+        let id = self.id.get();
+        self.id.set(id + 1);
+        format!("{}_${:04}", prefix, id)
     }
 }
 

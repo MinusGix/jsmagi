@@ -1,6 +1,6 @@
-use std::path::PathBuf;
+use std::{cell::Cell, path::PathBuf, rc::Rc};
 
-use jsmagi::{transform, MagiConfig};
+use jsmagi::{transform, MagiConfig, RandomName};
 use swc_common::{Globals, GLOBALS};
 
 use clap::{Parser, Subcommand};
@@ -53,6 +53,7 @@ fn main() {
             let conf = MagiConfig {
                 typescript,
                 assume_es_modules,
+                random_name: RandomName::default(),
             };
             let output = output.unwrap_or_else(|| {
                 let mut path = file

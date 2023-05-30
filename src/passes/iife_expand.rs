@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use crate::{
     rename::RenameIdentPass,
     util::{
-        extract_expr_from_pat_or_expr, extract_or_assign_initializer, extract_or_initializer,
-        get_assign_eq_expr, make_empty_object, make_undefined, unwrap_parens, NiceAccess, Remapper,
+        extract_expr_from_pat_or_expr, extract_or_initializer_with_assign, get_assign_eq_expr,
+        make_empty_object, make_undefined, unwrap_parens, NiceAccess, Remapper,
     },
     FromMagiConfig,
 };
@@ -126,9 +126,7 @@ fn eval_initializer_iife(call: &CallExpr, callee: &Expr) -> Option<IifeExpansion
 
     // Extract initializers of the form `a = x || (x = {})` or `x || (x = {})`
     // where `assign_ident` is `a` and `init_ident` is `x`
-    let (assign_ident, init_access) = extract_or_assign_initializer(&*init_expr)
-        .map(|(a, b)| (Some(a), b))
-        .or_else(|| Some((None, extract_or_initializer(&*init_expr)?)))?;
+    let (assign_ident, init_access) = extract_or_initializer_with_assign(&*init_expr)?;
     let init_access_pat_or_expr: PatOrExpr = init_access.clone().try_into().ok()?;
     let init_access_expr: Expr = init_access.clone().try_into().ok()?;
 
