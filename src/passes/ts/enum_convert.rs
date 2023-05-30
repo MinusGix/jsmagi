@@ -1,13 +1,13 @@
-use swc_atoms::{js_word, JsWord};
+use swc_atoms::JsWord;
 use swc_common::{Mark, SyntaxContext};
 use swc_ecma_ast::{
     op, AssignExpr, BinExpr, BindingIdent, CallExpr, Callee, Expr, ExprOrSpread, ExprStmt, FnExpr,
-    Ident, Lit, MemberExpr, MemberProp, ModuleItem, Pat, PatOrExpr, Stmt, TsEnumDecl, TsEnumMember,
-    TsEnumMemberId,
+    Ident, Lit, ModuleItem, Pat, PatOrExpr, Stmt, TsEnumDecl, TsEnumMember, TsEnumMemberId,
 };
 
 use swc_ecma_transforms_testing::test;
 
+use swc_ecma_utils::member_expr;
 use swc_ecma_visit::{noop_visit_mut_type, VisitMut, VisitMutWith};
 
 use crate::{
@@ -232,22 +232,7 @@ fn visit_stmt(random_name: &RandomName, stmt: &Stmt) -> Option<Vec<Stmt>> {
     // or, if we just have `(p || (p = {}))` then `Object.assign(p, enum_$42)`.
 
     {
-        // TODO: I don't completely understand syntax context. Are these unique or are they the same?
-        let object_ctxt = SyntaxContext::empty().apply_mark(Mark::fresh(Mark::root()));
-        let assign_ctxt = SyntaxContext::empty().apply_mark(Mark::fresh(Mark::root()));
-
-        let object = js_word!("Object");
-        let object = Ident::new(object, span.with_ctxt(object_ctxt));
-
-        let assign = JsWord::from("assign");
-        let assign = Ident::new(assign, span.with_ctxt(assign_ctxt));
-
-        // TODO: better spans
-        let field_access = MemberExpr {
-            span,
-            obj: Box::new(object.into()),
-            prop: MemberProp::Ident(assign),
-        };
+        let field_access = member_expr!(span, Object.assign);
 
         let target: Expr = match init_access {
             NiceAccess::Ident(_) => use_v.clone().into(),
@@ -256,7 +241,7 @@ fn visit_stmt(random_name: &RandomName, stmt: &Stmt) -> Option<Vec<Stmt>> {
 
         let call = CallExpr {
             span,
-            callee: Callee::Expr(Box::new(field_access.into())),
+            callee: Callee::Expr(field_access),
             args: vec![target.into(), Expr::from(enum_id).into()],
             type_args: None,
         };
