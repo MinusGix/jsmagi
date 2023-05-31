@@ -94,6 +94,27 @@ This isn't always more readable, but it can be. This is also easier for future p
 Converts `var a = 0, b = 1, c = 2` into `var a = 0; var b = 1; var c = 2`.
 This isn't always more readable, but it can be. This is also easier for future passes to removed unused variable declarations, or to collapse the future assignments into one.
 
+### Enum Recognition
+Recognizes enum definitions in JavaScript and converts them into TypeScript enums.  
+```js
+(function (e) {
+    e[e.A = 0] = "A";
+    e[e.B = 1] = "B";
+    e[e.C = 2] = "C";
+})(p = exports.Thing || (exports.Thing = {}));
+```
+into
+```ts
+exports.Thing = exports.Thing || {};
+p = exports.Thing;
+enum Thing {
+    A = 0,
+    B = 1,
+    C = 2,
+}
+Object.assign(exports.Thing, Thing);
+```
+Not elegant, but the other pieces can hopefully be cleaned up by other passes.
 
 
 ## Ideas
@@ -101,19 +122,6 @@ This isn't always more readable, but it can be. This is also easier for future p
 stuff like ` this.a || (this.a = !0, this.b && (this.b.fire(void 0), this.dispose()))`
 `s && (a = s.type, c = s.handler);`
 `return this._token || (this._token = new c), this._token;`
-
-### IIFEs
-recognize typescript enum defs
-```js
-  (function(e1) {
-                e1[e1.A = 0] = "A";
-                e1[e1.B = 1] = "B";
-                e1[e1.C = 2] = "C";
-            })(p = t.Thing || (t.Thing = {}));
-```
-and maybe insert comments specifying that it is a ts enum.
-
-For functions like these we can expand them out, to just use the variable directly.
 
 ### Source Maps
 TODO: might be able to use source maps for some better results?
@@ -227,11 +235,41 @@ and thus simplify the code quite a bit.
 ### JSX Conversion
 It might be desirable to be able to convert transpiled JSX back into JSX?
 
+### Improve enum gen
+Currently we generate enums like:
+```typescript
+exports.Trace = exports.Trace || {};
+p = exports.Trace;
+enum Trace {
+    Off = 0,
+    Messages = 1,
+    Verbose = 2
+}
+Object.assign(exports.Trace, Trace);
+```
+Due to the way `exports.Trace` is initialized we can't do something smarter like `exports.Trace = Trace;`.  
+But! It seems like some generated code does:
+```typescript
+exports.Trace = undefined;
+```
+at the start of their module. We could detect this, check that nothing else assigns to it, and then do the nicer version.
+```typescript
+enum Trace {
+    Off = 0,
+    Messages = 1,
+    Verbose = 2
+}
+exports.Trace = Trace;
+p = exports.Trace;
+```
+and potentially just get rid of the undefined declaration.
+
 ## Known Bugs
 - Renaming `(e, t, n)` to `(module, exports, require)` can instead end up with `(module1, exports, require1)` and the like. This is an SWC bug.
 - comment on line before root iife can end up just before it after transformation
   - `/* abc */ (() => {})`
 - Only sortof bug, but maybe need better default tsconfig: Classes complain that fields aren't defined. Inferring the names of fields probably wouldn't be hard, but the issue is getting the types. We could just use `any`.
+- We don't handle typescript types and the like on inputs. This is fine for the most part, since you rarely have typescript code to deobfuscate.
 
 ## Wacky Unimplemented Ideas
 These are ideas that I'd love to implement, but are significantly more complicated and thus might take a while (if they ever appear)!
