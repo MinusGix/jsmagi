@@ -7,4 +7,5 @@ pub mod not_lit;
 pub mod seq_expand;
 pub mod ts;
 pub mod var_decl_expand;
+pub mod var_decl_simp;
 pub mod void_to_undefined;

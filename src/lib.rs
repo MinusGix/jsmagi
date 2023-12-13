@@ -27,6 +27,7 @@ pub mod eval;
 pub mod passes;
 pub mod rename;
 
+pub mod effect;
 pub mod util;
 
 #[derive(Debug, Clone)]

@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 
 use swc_atoms::js_word;
-use swc_common::{EqIgnoreSpan, Span, SyntaxContext};
+use swc_common::{pass::Either, EqIgnoreSpan, Span, SyntaxContext};
 use swc_ecma_ast::{
     AssignExpr, AssignOp, BinExpr, BinaryOp, BindingIdent, Expr, Id, Ident, MemberExpr, MemberProp,
-    ObjectLit, ParenExpr, Pat, PatOrExpr,
+    ModuleItem, ObjectLit, ParenExpr, Pat, PatOrExpr, Stmt,
 };
 use swc_ecma_visit::{noop_visit_mut_type, VisitMut};
 
@@ -192,6 +192,126 @@ pub fn get_assign_eq_expr(expr: &Expr) -> Option<&AssignExpr> {
         Some(assign)
     } else {
         None
+    }
+}
+
+#[derive(Debug)]
+pub enum Stmts<'a> {
+    Stmts(&'a Vec<Stmt>),
+    Module(&'a Vec<ModuleItem>),
+}
+
+impl<'a> Stmts<'a> {
+    pub fn iter<'s: 'a>(&'s self) -> impl Iterator<Item = &'a Stmt> + 's {
+        match self {
+            Stmts::Stmts(stmts) => Either::Left(stmts.iter()),
+            Stmts::Module(stmts) => Either::Right(stmts.iter().filter_map(ModuleItem::as_stmt)),
+        }
+    }
+}
+
+impl<'a> From<&'a Vec<Stmt>> for Stmts<'a> {
+    fn from(stmts: &'a Vec<Stmt>) -> Self {
+        Stmts::Stmts(stmts)
+    }
+}
+
+impl<'a> From<&'a Vec<ModuleItem>> for Stmts<'a> {
+    fn from(stmts: &'a Vec<ModuleItem>) -> Self {
+        Stmts::Module(stmts)
+    }
+}
+
+#[derive(Debug)]
+pub enum StmtsMut<'a> {
+    Stmts(&'a mut Vec<Stmt>),
+    Module(&'a mut Vec<ModuleItem>),
+}
+impl<'a> StmtsMut<'a> {
+    // is this lifetime sane?
+    pub fn iter<'s>(&'s self) -> impl Iterator<Item = &'s Stmt> + DoubleEndedIterator
+    where
+        'a: 's,
+    {
+        match self {
+            StmtsMut::Stmts(stmts) => Either::Left(stmts.iter()),
+            StmtsMut::Module(stmts) => Either::Right(stmts.iter().filter_map(ModuleItem::as_stmt)),
+        }
+    }
+
+    pub fn iter_mut<'s>(&'s mut self) -> impl Iterator<Item = &'s mut Stmt> + DoubleEndedIterator
+    where
+        'a: 's,
+    {
+        match self {
+            StmtsMut::Stmts(stmts) => Either::Left(stmts.iter_mut()),
+            StmtsMut::Module(stmts) => {
+                Either::Right(stmts.iter_mut().filter_map(ModuleItem::as_mut_stmt))
+            }
+        }
+    }
+
+    /// Iterate with indices into the underlying vector.
+    pub fn iter_idx<'s>(&'s self) -> impl Iterator<Item = (usize, &'s Stmt)>
+    where
+        'a: 's,
+    {
+        match self {
+            StmtsMut::Stmts(stmts) => Either::Left(stmts.iter().enumerate()),
+            StmtsMut::Module(stmts) => Either::Right(
+                stmts
+                    .iter()
+                    .map(ModuleItem::as_stmt)
+                    .enumerate()
+                    .filter_map(|(i, s)| s.map(|s| (i, s))),
+            ),
+        }
+    }
+
+    /// Iterate with indices into the underlying vector.
+    pub fn iter_mut_idx<'s>(&'s mut self) -> impl Iterator<Item = (usize, &'s mut Stmt)>
+    where
+        'a: 's,
+    {
+        match self {
+            StmtsMut::Stmts(stmts) => Either::Left(stmts.iter_mut().enumerate()),
+            StmtsMut::Module(stmts) => Either::Right(
+                stmts
+                    .iter_mut()
+                    .map(ModuleItem::as_mut_stmt)
+                    .enumerate()
+                    .filter_map(|(i, s)| s.map(|s| (i, s))),
+            ),
+        }
+    }
+
+    pub fn push(&mut self, stmt: Stmt) {
+        match self {
+            StmtsMut::Stmts(stmts) => stmts.push(stmt),
+            StmtsMut::Module(stmts) => stmts.push(ModuleItem::Stmt(stmt)),
+        }
+    }
+
+    /// Insert a statement at the given index.
+    ///
+    /// # Panics
+    /// If `idx > len`
+    pub fn insert(&mut self, idx: usize, stmt: Stmt) {
+        match self {
+            StmtsMut::Stmts(stmts) => stmts.insert(idx, stmt),
+            StmtsMut::Module(stmts) => stmts.insert(idx, ModuleItem::Stmt(stmt)),
+        }
+    }
+}
+
+impl<'a> From<&'a mut Vec<Stmt>> for StmtsMut<'a> {
+    fn from(stmts: &'a mut Vec<Stmt>) -> Self {
+        StmtsMut::Stmts(stmts)
+    }
+}
+impl<'a> From<&'a mut Vec<ModuleItem>> for StmtsMut<'a> {
+    fn from(stmts: &'a mut Vec<ModuleItem>) -> Self {
+        StmtsMut::Module(stmts)
     }
 }
 
