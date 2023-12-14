@@ -1,22 +1,19 @@
-[package]
-name = "jsmagi"
-version = "0.1.0"
-edition = "2021"
+[workspace]
+members = ["jsmagi"]
+resolver = "2"
 
-[profile.release]
-lto = true
-
-[dependencies]
-clap = { version = "4.0.32", features = ["derive"] }
+[workspace.dependencies]
 serde = "1"
 smallvec = { version = "1.10.0", features = ["const_generics"] }
-swc = "0.236.17"
-swc_atoms = "0.4.30"
-swc_common = "0.29.23"
-swc_core = "0.44.*"
-swc_ecma_ast = "0.95.7"
-swc_ecma_parser = "0.123.11"
-swc_ecma_transforms_base = "0.112.15"
-swc_ecma_transforms_testing = "0.115.16"
-swc_ecma_utils = "0.106.13"
-swc_ecma_visit = "0.81.7"
+swc = "0.270.0"
+swc_atoms = "0.6.5"
+swc_common = "0.33.12"
+swc_core = "0.87.*"
+swc_ecma_ast = "0.110.15"
+swc_ecma_parser = "0.141.33"
+swc_ecma_transforms_base = "0.135.0"
+swc_ecma_transforms_testing = "0.138.0"
+swc_ecma_utils = "0.125.0"
+swc_ecma_visit = "0.96.15"
+swc_ecma_codegen = "0.146.44"
+swc_ecma_testing = "0.22.15"
